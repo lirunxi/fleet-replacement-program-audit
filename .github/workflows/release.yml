@@ -11,7 +11,7 @@ jobs:
   attach:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Prepare named download
         run: cp docs/index.html fleet_replacement_report.html
       - name: Upload dashboard
