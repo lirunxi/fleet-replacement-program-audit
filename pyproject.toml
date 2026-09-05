@@ -38,7 +38,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "-q --basetemp=build/pytest-temp -p no:cacheprovider"
+addopts = "-q --basetemp=.pytest-temp -p no:cacheprovider"
 testpaths = ["tests"]
 pythonpath = ["src"]
 
