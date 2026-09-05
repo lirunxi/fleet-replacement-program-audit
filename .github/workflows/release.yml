@@ -1,0 +1,20 @@
+name: Attach standalone dashboard to releases
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare named download
+        run: cp docs/index.html fleet_replacement_report.html
+      - name: Upload dashboard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" fleet_replacement_report.html

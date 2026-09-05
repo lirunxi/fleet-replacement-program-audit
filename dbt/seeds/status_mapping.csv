@@ -1,0 +1,8 @@
+status_key,status_label,is_operational,is_replacement_program
+ACTIVE UNIT,Active,1,0
+REDEPLOYED UNIT,Redeployed,1,0
+REPLACEMENT PROGRAM,Replacement Program,1,1
+UNIT AT AUCTION TO BE SOLD,At Auction,0,0
+UNIT IS TOTALED,Totaled,0,0
+UNIT RETURN FOR DISP/SALE/REM,Return for Disposal,0,0
+UNIT SOLD,Sold,0,0

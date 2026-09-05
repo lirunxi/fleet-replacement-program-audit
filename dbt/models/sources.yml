@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: fleet_units
+      - name: fleet_usage
+      - name: ingestion_runs

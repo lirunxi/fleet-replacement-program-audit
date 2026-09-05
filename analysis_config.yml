@@ -1,0 +1,12 @@
+availability_threshold: 0.80
+availability_sensitivity: [0.75, 0.80, 0.85]
+severe_availability_threshold: 0.60
+peer_percentile_cutoff: 0.20
+peer_strict_cutoff: 0.10
+peer_minimum_size: 30
+planning_window_years: 2
+alpha: 0.05
+minimum_material_availability_difference: 0.05
+bootstrap_iterations: 10000
+permutation_iterations: 10000
+random_seed: 20260904

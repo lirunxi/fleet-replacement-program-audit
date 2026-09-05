@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: "1.10.18"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.lock
+          python -m pip install --no-deps --no-build-isolation -e ".[dev]"
+      - name: Lint and unit tests
+        run: |
+          ruff check src tests scripts run_pipeline.py
+          pytest
+      - name: Install browser runtime
+        run: |
+          python -m playwright install --with-deps chromium
+          echo "BROWSER_PATH=$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')" >> "$GITHUB_ENV"
+      - name: Build and validate the complete synthetic project
+        env:
+          PYTHONPATH: src
+          FLEET_RAW_DIR: build/synthetic_raw
+          FLEET_DB_PATH: build/synthetic_fleet.duckdb
+        run: |
+          python scripts/build_synthetic_fixture.py --output-dir build/synthetic_raw
+          python run_pipeline.py all
+          python run_pipeline.py test
+      - name: Confirm portfolio artifact
+        run: test -s docs/index.html

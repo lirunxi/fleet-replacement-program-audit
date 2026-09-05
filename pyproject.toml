@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fleet-replacement-audit"
+version = "1.0.0"
+description = "Reproducible audit of fleet replacement-program alignment and risk-based review queues"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "duckdb==1.5.5",
+  "dbt-duckdb==1.11.0",
+  "pandas==3.0.5",
+  "numpy==2.5.2",
+  "scipy==1.17.1",
+  "statsmodels==0.15.0",
+  "plotly==7.0.0",
+  "kaleido==1.2.0",
+  "PyYAML==6.0.3",
+  "pyarrow==25.0.1",
+  "Jinja2==3.1.6",
+  "playwright==1.58.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "ruff==0.16.6",
+  "beautifulsoup4==4.15.0",
+  "pip-tools==7.6.1",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q --basetemp=build/pytest-temp -p no:cacheprovider"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

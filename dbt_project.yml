@@ -1,0 +1,26 @@
+name: fleet_replacement_audit
+version: "1.0.0"
+config-version: 2
+profile: fleet_replacement_audit
+
+model-paths: ["dbt/models"]
+seed-paths: ["dbt/seeds"]
+test-paths: ["dbt/tests"]
+macro-paths: ["dbt/macros"]
+clean-targets: ["dbt/target", "dbt/logs"]
+
+models:
+  fleet_replacement_audit:
+    staging:
+      +schema: staging
+      +materialized: table
+    core:
+      +schema: core
+      +materialized: table
+    analytics:
+      +schema: analytics
+      +materialized: table
+
+seeds:
+  fleet_replacement_audit:
+    +schema: staging

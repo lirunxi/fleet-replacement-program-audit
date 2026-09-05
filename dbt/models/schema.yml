@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: stg_fleet_units
+    columns:
+      - name: unit_no
+        data_tests:
+          - not_null
+          - unique
+      - name: current_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - Active
+                  - Redeployed
+                  - Replacement Program
+                  - At Auction
+                  - Totaled
+                  - Return for Disposal
+                  - Sold
+  - name: stg_fleet_usage
+    columns:
+      - name: unit_no
+        data_tests:
+          - not_null
+          - unique
+      - name: availability_confidence
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [High, Medium, Low]
+  - name: vehicle
+    columns:
+      - name: unit_no
+        data_tests:
+          - not_null
+          - unique
+  - name: usage_snapshot
+    columns:
+      - name: unit_no
+        data_tests:
+          - not_null
+          - unique
+  - name: vehicle_metrics
+    columns:
+      - name: unit_no
+        data_tests:
+          - not_null
+          - unique
+  - name: vehicle_review_features
+    columns:
+      - name: unit_no
+        data_tests:
+          - not_null
+          - unique
+      - name: lifecycle_band
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - At or beyond expected life
+                  - Due within two years
+                  - More than two years remaining
+                  - Unknown lifecycle

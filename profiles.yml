@@ -1,0 +1,7 @@
+fleet_replacement_audit:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('FLEET_DB_PATH') }}"
+      threads: 4

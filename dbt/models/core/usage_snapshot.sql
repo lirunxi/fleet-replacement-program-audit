@@ -1,0 +1,19 @@
+select
+    unit_no,
+    last_fuel_date_raw,
+    last_workorder_open_date_raw,
+    life_km,
+    life_hours,
+    ytd_km,
+    ytd_hours,
+    expected_usage_km,
+    expected_usage_hours,
+    veu_value,
+    available_hours,
+    downtime_hours,
+    invalid_availability,
+    suspected_source_displacement,
+    availability_confidence,
+    _source_row_number,
+    _raw_row_hash
+from {{ ref('stg_fleet_usage') }}

@@ -1,0 +1,884 @@
+---
+title: "Fleet Replacement Program Audit"
+format:
+  dashboard:
+    embed-resources: true
+    theme: cosmo
+    css: ../reports/styles.css
+    orientation: rows
+    scrolling: true
+execute:
+  enabled: false
+---
+
+# Executive summary
+
+## Row {height=150}
+
+::: {.card}
+<div class="value-card"><div class="value">{{ fleet_count | int }}</div>
+<div class="label">Unique vehicles after exact-duplicate handling</div></div>
+:::
+
+::: {.card}
+<div class="value-card"><div class="value">{{ operational_count | int }}</div>
+<div class="label">Operational vehicles</div></div>
+:::
+
+::: {.card}
+<div class="value-card planning"><div class="value">{{ candidate_count | int }}</div>
+<div class="label">Outside-program replacement-condition candidates</div></div>
+:::
+
+::: {.card}
+<div class="value-card urgent"><div class="value">{{ urgent_count | int }}</div>
+<div class="label">Urgent candidates requiring management review</div></div>
+:::
+
+## Row {height=400}
+
+::: {.card .decision-card}
+## Executive conclusion
+
+<div class="decision-note">{{ thesis }}</div>
+
+{{ h2_statement }}
+
+The queue is a structured review aid—not an automatic replacement approval. It combines
+lifecycle timing, absolute availability, peer-relative availability, data confidence,
+transparent tiers and threshold sensitivity. It uses neither a composite score nor a
+replacement classifier.
+
+<button class="download-report" id="download-standalone-report" type="button">Download offline report</button>
+<span class="download-status" id="report-download-status" aria-live="polite"></span>
+<script>
+(() => {
+  const button = document.getElementById("download-standalone-report");
+  const status = document.getElementById("report-download-status");
+  if (!button) return;
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    if (status) status.textContent = "Preparing download…";
+    window.setTimeout(() => {
+      const clone = document.documentElement.cloneNode(true);
+      const clonedExplorer = clone.querySelector(".explorer-shell");
+      if (clonedExplorer) {
+        const mount = document.createElement("div");
+        mount.id = "fleet-explorer-offline";
+        clonedExplorer.replaceWith(mount);
+      }
+      clone.querySelectorAll("bslib-tooltip, .tooltip, .popover").forEach(node => node.remove());
+      clone.querySelectorAll("[aria-describedby]").forEach(node => node.removeAttribute("aria-describedby"));
+      const clonedStatus = clone.querySelector("#report-download-status");
+      if (clonedStatus) clonedStatus.textContent = "";
+      const markup = "<!DOCTYPE html>\n" + clone.outerHTML;
+      const url = URL.createObjectURL(new Blob([markup], {type: "text/html;charset=utf-8"}));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "fleet_replacement_report.html";
+      anchor.hidden = true;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      button.disabled = false;
+      if (status) status.textContent = "Report downloaded.";
+    }, 0);
+  });
+})();
+</script>
+:::
+
+::: {.card .recommendation-card}
+## Management recommendation
+
+1. Retain the current program if its lifecycle alignment remains operationally valid.
+2. Run a quarterly exception review beginning with urgent and high-tier candidates.
+3. Route younger poor performers to reliability investigation, not capital replacement.
+4. Keep overdue reliable vehicles in lifecycle planning.
+5. Repair source-field alignment and define usage measures before right-sizing.
+:::
+
+## Row {height=350}
+
+::: {.card}
+{{ program_figure }}
+:::
+
+::: {.card}
+## Verified reconciliation
+
+{{ overview_table }}
+:::
+
+# Program alignment
+
+## Row
+
+::: {.card}
+{{ program_figure }}
+:::
+
+::: {.card}
+{{ availability_figure }}
+:::
+
+## Row
+
+::: {.card}
+## What this answers
+
+The replacement-program flag is an observed management decision, not ground truth. H2
+tests whether that decision is associated with lifecycle urgency. Current-program vehicles
+remain in this audit but never enter the new-candidate queue.
+:::
+
+::: {.card}
+## Decision boundary
+
+This snapshot can show alignment and exceptions. It cannot prove causation or that any
+specific vehicle must be replaced. Condition inspection, safety, work-order and cost
+evidence remain necessary for approval.
+:::
+
+# Vehicle review explorer
+
+## Row
+
+::: {.card}
+<div id="fleet-explorer-offline"></div>
+<script id="fleet-vehicle-data" type="application/json">{{ vehicle_json }}</script>
+<script id="division-rate-data" type="application/json">{{ division_rate_json }}</script>
+<script>
+window.buildFleetExplorer = vehicles => {
+  const doc = window.document;
+  const root = doc.createElement("div");
+  root.className = "explorer-shell";
+  const controls = doc.createElement("div");
+  controls.className = "explorer-controls";
+  const content = doc.createElement("section");
+  content.className = "explorer-content";
+  root.append(controls, content);
+
+  const unique = (field, fallback = "Unknown") =>
+    Array.from(new Set(vehicles.map(d => d[field] ?? fallback))).sort();
+  const selectFilters = {};
+  const addSelect = (key, label, options, initial = "All") => {
+    const wrapper = doc.createElement("label");
+    wrapper.className = "filter-control";
+    wrapper.append(doc.createTextNode(label));
+    const select = doc.createElement("select");
+    select.setAttribute("aria-label", label);
+    options.forEach(value => {
+      const option = doc.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      select.append(option);
+    });
+    select.value = initial;
+    wrapper.append(select);
+    controls.append(wrapper);
+    selectFilters[key] = select;
+    return select;
+  };
+
+  const actionOptions = ["Actionable outside program"].concat(unique("primary_action", ""));
+  addSelect("action", "Primary action", actionOptions, "Actionable outside program");
+  addSelect("tier", "Review tier", ["All"].concat(unique("review_tier")));
+  addSelect("division", "Division", ["All"].concat(unique("division")));
+  addSelect("unit_type", "Unit type", ["All"].concat(unique("unit_type")));
+  addSelect("fuel", "Fuel", ["All"].concat(unique("fuel")));
+  addSelect("maintenance_location", "Maintenance location", ["All"].concat(unique("maintenance_location")));
+  addSelect("lifecycle_band", "Lifecycle band", ["All"].concat(unique("lifecycle_band")));
+  addSelect("priority", "High-priority status", ["All", "Verified Y", "Not verified"]);
+  addSelect("confidence", "Availability confidence", ["All", "High", "Medium", "Low"]);
+
+  const ranges = {};
+  const addRangePair = (key, label, minimum, maximum, step, initialMin, initialMax) => {
+    const wrapper = doc.createElement("fieldset");
+    wrapper.className = "filter-range";
+    const legend = doc.createElement("legend");
+    legend.textContent = label;
+    wrapper.append(legend);
+    const makeRange = (suffix, value) => {
+      const line = doc.createElement("label");
+      line.textContent = suffix + ": ";
+      const output = doc.createElement("span");
+      output.textContent = Number(value).toFixed(2);
+      const input = doc.createElement("input");
+      input.type = "range";
+      input.min = minimum;
+      input.max = maximum;
+      input.step = step;
+      input.value = value;
+      input.setAttribute("aria-label", label + " " + suffix.toLowerCase());
+      input.addEventListener("input", () => output.textContent = Number(input.value).toFixed(2));
+      line.append(output, input);
+      wrapper.append(line);
+      return input;
+    };
+    const minimumInput = makeRange("Min", initialMin);
+    const maximumInput = makeRange("Max", initialMax);
+    ranges[key] = {
+      min: minimumInput,
+      max: maximumInput,
+      initialMin: minimumInput.value,
+      initialMax: maximumInput.value
+    };
+    controls.append(wrapper);
+  };
+  const maximumOverdue = Math.max(0, ...vehicles.map(d => d.years_overdue ?? 0));
+  addRangePair("availability_proxy", "Availability proxy", 0, 1, 0.01, 0, 1);
+  addRangePair("years_overdue", "Years overdue", 0, maximumOverdue, 0.5, 0, maximumOverdue);
+  addRangePair("availability_peer_percentile", "Peer percentile", 0, 1, 0.01, 0, 1);
+  addRangePair("stability_pct", "Sensitivity stability", 0, 1, 1 / 6, 0, 1);
+
+  const textFilters = {};
+  const addText = (key, label, placeholder) => {
+    const wrapper = doc.createElement("label");
+    wrapper.className = "filter-control";
+    wrapper.append(doc.createTextNode(label));
+    const input = doc.createElement("input");
+    input.type = "search";
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", label);
+    wrapper.append(input);
+    controls.append(wrapper);
+    textFilters[key] = input;
+  };
+  addText("category_description", "Category description", "Type text…");
+  addText("unit_no", "UNIT_NO", "Type ID…");
+
+  const reset = doc.createElement("button");
+  reset.type = "button";
+  reset.className = "dashboard-button";
+  reset.textContent = "Reset all filters";
+  controls.prepend(reset);
+
+  const heading = doc.createElement("div");
+  heading.className = "explorer-kpi";
+  content.append(heading);
+  const charts = doc.createElement("div");
+  charts.className = "explorer-charts";
+  content.append(charts);
+  const actionChart = doc.createElement("div");
+  const divisionChart = doc.createElement("div");
+  const typeChart = doc.createElement("div");
+  [actionChart, divisionChart, typeChart].forEach(chart => {
+    chart.className = "browser-chart";
+    charts.append(chart);
+  });
+  const scatterCard = doc.createElement("div");
+  scatterCard.className = "browser-chart scatter-chart";
+  content.append(scatterCard);
+  const tableTools = doc.createElement("div");
+  tableTools.className = "table-tools";
+  const previous = doc.createElement("button");
+  previous.textContent = "Previous";
+  const pageLabel = doc.createElement("span");
+  const next = doc.createElement("button");
+  next.textContent = "Next";
+  const download = doc.createElement("button");
+  download.textContent = "Download filtered CSV";
+  [previous, next, download].forEach(button => {
+    button.type = "button";
+    button.className = "dashboard-button";
+  });
+  tableTools.append(previous, pageLabel, next, download);
+  content.append(tableTools);
+  const tableWrap = doc.createElement("div");
+  tableWrap.className = "browser-table-wrap";
+  content.append(tableWrap);
+
+  let pageNumber = 1;
+  let sortField = null;
+  let sortAscending = true;
+  let currentFiltered = [];
+  const pageSize = 25;
+  const columns = [
+    "unit_no", "primary_action", "review_tier", "division", "unit_type",
+    "category_description", "fuel", "maintenance_location", "current_status",
+    "in_replacement_program", "high_priority_flag", "age", "expected_life_years",
+    "life_consumed_pct", "years_overdue", "remaining_life_years", "lifecycle_band",
+    "availability_proxy", "availability_confidence", "peer_group", "peer_group_size",
+    "peer_median_availability", "availability_peer_percentile", "pareto_front",
+    "stability_pct", "reason_codes"
+  ];
+  const labels = {
+    unit_no: "Unit", primary_action: "Action", review_tier: "Tier",
+    category_description: "Category", maintenance_location: "Maintenance location",
+    current_status: "Status", in_replacement_program: "In program",
+    high_priority_flag: "High priority", life_consumed_pct: "Life consumed",
+    years_overdue: "Years overdue", remaining_life_years: "Years remaining",
+    expected_life_years: "Expected life", availability_proxy: "Availability",
+    availability_confidence: "Availability confidence", peer_group: "Peer group",
+    peer_group_size: "Peer n", peer_median_availability: "Peer median",
+    availability_peer_percentile: "Peer percentile", pareto_front: "Pareto front",
+    stability_pct: "Stability"
+  };
+
+  const inRange = (value, range) => {
+    const unchanged = Number(range.min.value) === Number(range.initialMin)
+      && Number(range.max.value) === Number(range.initialMax);
+    if (unchanged) return true;
+    if (value == null) return false;
+    return value >= Number(range.min.value) && value <= Number(range.max.value);
+  };
+  const matchesSelect = (value, select) =>
+    select.value === "All" || (value ?? "Unknown") === select.value;
+  const filteredRows = () => vehicles.filter(d => {
+    const action = selectFilters.action.value;
+    const actionMatch = action === "Actionable outside program"
+      ? (!d.in_replacement_program && d.primary_action !== "No immediate action")
+      : d.primary_action === action;
+    const priorityMatch = selectFilters.priority.value === "All"
+      || (selectFilters.priority.value === "Verified Y" ? d.high_priority_flag : !d.high_priority_flag);
+    return actionMatch
+      && matchesSelect(d.review_tier, selectFilters.tier)
+      && matchesSelect(d.division, selectFilters.division)
+      && matchesSelect(d.unit_type, selectFilters.unit_type)
+      && matchesSelect(d.fuel, selectFilters.fuel)
+      && matchesSelect(d.maintenance_location, selectFilters.maintenance_location)
+      && matchesSelect(d.lifecycle_band, selectFilters.lifecycle_band)
+      && priorityMatch
+      && matchesSelect(d.availability_confidence, selectFilters.confidence)
+      && inRange(d.availability_proxy, ranges.availability_proxy)
+      && inRange(d.years_overdue, ranges.years_overdue)
+      && inRange(d.availability_peer_percentile, ranges.availability_peer_percentile)
+      && inRange(d.stability_pct, ranges.stability_pct)
+      && (!textFilters.category_description.value
+        || String(d.category_description ?? "").toLowerCase().includes(textFilters.category_description.value.toLowerCase()))
+      && (!textFilters.unit_no.value
+        || String(d.unit_no).toLowerCase().includes(textFilters.unit_no.value.toLowerCase()));
+  });
+
+  const countsFor = (rows, key) => {
+    const counts = new Map();
+    rows.forEach(row => {
+      const value = row[key] ?? "Unknown";
+      counts.set(value, (counts.get(value) ?? 0) + 1);
+    });
+    return Array.from(counts, ([label, value]) => ({label, value}))
+      .sort((a, b) => b.value - a.value);
+  };
+  const actionTierCountsFor = rows => {
+    const shortActionLabels = {
+      "Replacement condition assessment": "Condition",
+      "Reliability investigation": "Reliability",
+      "Lifecycle planning": "Lifecycle",
+      "Data quality review": "Data review",
+      "Current program alignment": "In program",
+      "No immediate action": "No action"
+    };
+    const counts = new Map();
+    rows.forEach(row => {
+      const action = row.primary_action ?? "Unknown";
+      const label = (shortActionLabels[action] ?? action) + " · " + (row.review_tier ?? "Unknown");
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    });
+    return Array.from(counts, ([label, value]) => ({label, value}))
+      .sort((a, b) => b.value - a.value);
+  };
+  const candidateRatesFor = rows => {
+    const selectedDivisions = new Set(rows.map(row => row.division ?? "Unknown"));
+    const filteredCandidateCounts = new Map();
+    rows
+      .filter(row => row.primary_action === "Replacement condition assessment")
+      .forEach(row => {
+        const division = row.division ?? "Unknown";
+        filteredCandidateCounts.set(
+          division,
+          (filteredCandidateCounts.get(division) ?? 0) + 1
+        );
+      });
+    return window.fleetDivisionRates
+      .filter(group => selectedDivisions.has(group.division ?? "Unknown"))
+      .map(group => ({
+        label: group.division ?? "Unknown",
+        numerator: filteredCandidateCounts.get(group.division ?? "Unknown") ?? 0,
+        denominator: group.eligible_vehicles,
+        value: (filteredCandidateCounts.get(group.division ?? "Unknown") ?? 0)
+          / group.eligible_vehicles
+      }))
+      .filter(group => group.denominator > 0)
+      .sort((a, b) => b.value - a.value);
+  };
+  const drawBars = (container, title, data, limit = 12, formatter = null) => {
+    container.replaceChildren();
+    const headingNode = doc.createElement("h3");
+    headingNode.textContent = title;
+    container.append(headingNode);
+    const maximum = Math.max(1, ...data.map(d => d.value));
+    data.slice(0, limit).forEach(item => {
+      const row = doc.createElement("div");
+      row.className = "bar-row";
+      const label = doc.createElement("span");
+      label.textContent = item.label;
+      label.title = item.label;
+      const track = doc.createElement("div");
+      track.className = "bar-track";
+      const bar = doc.createElement("div");
+      bar.className = "bar-fill";
+      bar.style.width = (item.value / maximum * 100) + "%";
+      track.append(bar);
+      const value = doc.createElement("strong");
+      value.textContent = formatter ? formatter(item) : item.value.toLocaleString();
+      row.append(label, track, value);
+      container.append(row);
+    });
+  };
+
+  const drawScatter = rows => {
+    scatterCard.replaceChildren();
+    const title = doc.createElement("h3");
+    title.textContent = "Life consumed versus availability proxy";
+    scatterCard.append(title);
+    const valid = rows.filter(d => d.life_consumed_pct != null && d.availability_proxy != null);
+    const legend = doc.createElement("div");
+    legend.className = "scatter-legend";
+    const tierColors = {Urgent: "#B23A48", High: "#7B3F98", Planning: "#E3A21A", "Data review": "#7A8793", Monitor: "#155E9A"};
+    Object.entries(tierColors).forEach(([label, color]) => {
+      const item = doc.createElement("span");
+      const swatch = doc.createElement("i");
+      swatch.style.background = color;
+      item.append(swatch, doc.createTextNode(label));
+      legend.append(item);
+    });
+    scatterCard.append(legend);
+    const plot = doc.createElement("div");
+    plot.className = "scatter-plot";
+    scatterCard.append(plot);
+    if (!valid.length) {
+      plot.textContent = "No vehicles with valid lifecycle and availability values match these filters.";
+      plot.classList.add("empty-chart");
+      return;
+    }
+    const measuredWidth = plot.getBoundingClientRect().width || 900;
+    const width = Math.max(320, Math.min(1100, Math.round(measuredWidth)));
+    const height = width < 560 ? 340 : 410;
+    const margin = {
+      top: 34,
+      right: width < 560 ? 16 : 28,
+      bottom: width < 560 ? 70 : 68,
+      left: width < 560 ? 62 : 78
+    };
+    const observedMax = Math.max(1.25, ...valid.map(d => d.life_consumed_pct));
+    const xStep = observedMax <= 1.5 ? 0.25 : observedMax <= 3 ? 0.5 : 1;
+    const maxLife = Math.ceil(observedMax / xStep) * xStep;
+    const plotWidth = width - margin.left - margin.right;
+    const plotHeight = height - margin.top - margin.bottom;
+    const xScale = value => margin.left + (value / maxLife) * plotWidth;
+    const yScale = value => margin.top + (1 - value) * plotHeight;
+    const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-labelledby", "scatter-svg-title scatter-svg-desc");
+    const svgTitle = doc.createElementNS(svg.namespaceURI, "title");
+    svgTitle.id = "scatter-svg-title";
+    svgTitle.textContent = "Life consumed versus availability proxy";
+    const svgDescription = doc.createElementNS(svg.namespaceURI, "desc");
+    svgDescription.id = "scatter-svg-desc";
+    svgDescription.textContent = "Each point is a vehicle. The vertical reference marks expected life reached at 100 percent. The horizontal reference marks the 80 percent availability review threshold.";
+    svg.append(svgTitle, svgDescription);
+    const line = (x1, y1, x2, y2, color, dash = "", widthValue = 1) => {
+      const node = doc.createElementNS(svg.namespaceURI, "line");
+      [["x1", x1], ["y1", y1], ["x2", x2], ["y2", y2], ["stroke", color]].forEach(([key, value]) => node.setAttribute(key, value));
+      if (dash) node.setAttribute("stroke-dasharray", dash);
+      node.setAttribute("stroke-width", widthValue);
+      svg.append(node);
+    };
+    const text = (value, x, y, options = {}) => {
+      const node = doc.createElementNS(svg.namespaceURI, "text");
+      node.textContent = value;
+      node.setAttribute("x", x);
+      node.setAttribute("y", y);
+      node.setAttribute("fill", options.fill ?? "#526575");
+      node.setAttribute("font-size", options.size ?? 12);
+      node.setAttribute("font-family", "Segoe UI, Arial, sans-serif");
+      if (options.anchor) node.setAttribute("text-anchor", options.anchor);
+      if (options.weight) node.setAttribute("font-weight", options.weight);
+      if (options.transform) node.setAttribute("transform", options.transform);
+      svg.append(node);
+      return node;
+    };
+    const xTicks = [];
+    for (let tick = 0; tick <= maxLife + 0.0001; tick += xStep) xTicks.push(tick);
+    if (width < 560 && xTicks.length > 5) {
+      const internalTicks = xTicks.slice(1, -1).filter((_, index) => index % 2 === 1);
+      xTicks.splice(1, xTicks.length - 2, ...internalTicks);
+    }
+    xTicks.forEach(tick => {
+      const x = xScale(tick);
+      line(x, margin.top, x, margin.top + plotHeight, "#E2E8EE");
+      text(Math.round(tick * 100) + "%", x, margin.top + plotHeight + 22, {anchor: "middle"});
+    });
+    [0, 0.2, 0.4, 0.6, 0.8, 1].forEach(tick => {
+      const y = yScale(tick);
+      line(margin.left, y, margin.left + plotWidth, y, "#E2E8EE");
+      text(Math.round(tick * 100) + "%", margin.left - 10, y + 4, {anchor: "end"});
+    });
+    line(margin.left, margin.top + plotHeight, margin.left + plotWidth, margin.top + plotHeight, "#6B7C8B", "", 1.25);
+    line(margin.left, margin.top, margin.left, margin.top + plotHeight, "#6B7C8B", "", 1.25);
+    const availabilityThresholdY = yScale(0.8);
+    line(margin.left, availabilityThresholdY, margin.left + plotWidth, availabilityThresholdY, "#D98C00", "6,5", 1.5);
+    text("80% availability threshold", margin.left + plotWidth - 6, availabilityThresholdY - 8, {anchor: "end", fill: "#9A6500", weight: 600});
+    const lifecycleThresholdX = xScale(1);
+    line(lifecycleThresholdX, margin.top, lifecycleThresholdX, margin.top + plotHeight, "#6B7C8B", "6,5", 1.5);
+    text("Expected life reached", lifecycleThresholdX + 7, margin.top + 15, {fill: "#445564", weight: 600});
+    valid.forEach(d => {
+      const circle = doc.createElementNS(svg.namespaceURI, "circle");
+      circle.setAttribute("cx", xScale(d.life_consumed_pct));
+      circle.setAttribute("cy", yScale(d.availability_proxy));
+      circle.setAttribute("r", width < 560 ? 3 : 3.6);
+      circle.setAttribute("fill", tierColors[d.review_tier] ?? "#155E9A");
+      circle.setAttribute("stroke", "#FFFFFF");
+      circle.setAttribute("stroke-width", "0.45");
+      circle.setAttribute("opacity", 0.76);
+      const tooltip = doc.createElementNS(svg.namespaceURI, "title");
+      const availability = d.availability_proxy == null
+        ? "unknown" : (d.availability_proxy * 100).toFixed(1) + "%";
+      const peer = d.availability_peer_percentile == null
+        ? "unknown" : (d.availability_peer_percentile * 100).toFixed(1) + "%";
+      tooltip.textContent = String(d.unit_no)
+        + " | " + d.primary_action
+        + " | " + d.lifecycle_band
+        + " | availability " + availability
+        + " | peer percentile " + peer
+        + " | " + d.reason_codes;
+      circle.append(tooltip);
+      svg.append(circle);
+    });
+    text("Lifecycle consumed (% of expected life)", margin.left + plotWidth / 2, height - 16, {anchor: "middle", fill: "#263746", size: 13, weight: 600});
+    const yAxisX = 20;
+    const yAxisY = margin.top + plotHeight / 2;
+    text("Availability proxy (%)", yAxisX, yAxisY, {anchor: "middle", fill: "#263746", size: 13, weight: 600, transform: "rotate(-90 " + yAxisX + " " + yAxisY + ")"});
+    plot.append(svg);
+  };
+
+  const formatValue = (value, field) => {
+    if (value == null) return "—";
+    if ([
+      "life_consumed_pct", "availability_proxy", "peer_median_availability",
+      "availability_peer_percentile", "stability_pct"
+    ].includes(field)) {
+      return (Number(value) * 100).toFixed(1) + "%";
+    }
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (typeof value === "number") return Number(value).toFixed(2).replace(/\.00$/, "");
+    return String(value);
+  };
+  const renderTable = () => {
+    const sorted = currentFiltered.slice().sort((a, b) => {
+      if (sortField == null) {
+        const actionOrder = {
+          "Replacement condition assessment": 0,
+          "Reliability investigation": 1,
+          "Lifecycle planning": 2,
+          "Data quality review": 3
+        };
+        const tierOrder = {Urgent: 0, High: 1, Planning: 2, "Data review": 3, Monitor: 4};
+        return (actionOrder[a.primary_action] ?? 99) - (actionOrder[b.primary_action] ?? 99)
+          || (tierOrder[a.review_tier] ?? 99) - (tierOrder[b.review_tier] ?? 99)
+          || (a.pareto_front ?? 9999) - (b.pareto_front ?? 9999)
+          || (b.stability_pct ?? -1) - (a.stability_pct ?? -1)
+          || String(a.unit_no).localeCompare(String(b.unit_no));
+      }
+      const left = a[sortField] ?? "";
+      const right = b[sortField] ?? "";
+      return (left < right ? -1 : left > right ? 1 : 0) * (sortAscending ? 1 : -1);
+    });
+    const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+    pageNumber = Math.min(pageNumber, totalPages);
+    const rows = sorted.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+    const table = doc.createElement("table");
+    table.className = "interactive-table";
+    const head = doc.createElement("thead");
+    const headRow = doc.createElement("tr");
+    columns.forEach(field => {
+      const cell = doc.createElement("th");
+      cell.textContent = (labels[field] ?? field) + (sortField === field ? (sortAscending ? " ▲" : " ▼") : "");
+      cell.addEventListener("click", () => {
+        if (sortField === field) sortAscending = !sortAscending;
+        else { sortField = field; sortAscending = true; }
+        renderTable();
+      });
+      headRow.append(cell);
+    });
+    head.append(headRow);
+    const body = doc.createElement("tbody");
+    rows.forEach(row => {
+      const tableRow = doc.createElement("tr");
+      columns.forEach(field => {
+        const cell = doc.createElement("td");
+        cell.textContent = formatValue(row[field], field);
+        tableRow.append(cell);
+      });
+      body.append(tableRow);
+    });
+    table.append(head, body);
+    tableWrap.replaceChildren(table);
+    pageLabel.textContent = "Page " + pageNumber + " of " + totalPages;
+    previous.disabled = pageNumber <= 1;
+    next.disabled = pageNumber >= totalPages;
+  };
+
+  const render = () => {
+    currentFiltered = filteredRows();
+    pageNumber = 1;
+    heading.innerHTML = "<strong>" + currentFiltered.length.toLocaleString() + "</strong><span> vehicles matching current filters</span>";
+    drawBars(actionChart, "Count by action and tier", actionTierCountsFor(currentFiltered), 10);
+    drawBars(
+      divisionChart,
+      "Filtered replacement candidates per full eligible division fleet",
+      candidateRatesFor(currentFiltered),
+      12,
+      item => (item.value * 100).toFixed(1) + "% (" + item.numerator + "/" + item.denominator + ")"
+    );
+    drawBars(typeChart, "Filtered vehicles by unit type", countsFor(currentFiltered, "unit_type"), 7);
+    drawScatter(currentFiltered);
+    renderTable();
+  };
+  const csvEscape = value => {
+    const text = value == null ? "" : String(value);
+    return '"' + text.replaceAll('"', '""') + '"';
+  };
+  download.addEventListener("click", () => {
+    const rows = [columns.join(",")].concat(
+      currentFiltered.map(row => columns.map(field => csvEscape(row[field])).join(","))
+    );
+    const url = URL.createObjectURL(new Blob([rows.join("\r\n")], {type: "text/csv;charset=utf-8"}));
+    const anchor = doc.createElement("a");
+    anchor.href = url;
+    anchor.download = "filtered_fleet_review.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  });
+  previous.addEventListener("click", () => { pageNumber -= 1; renderTable(); });
+  next.addEventListener("click", () => { pageNumber += 1; renderTable(); });
+  [...Object.values(selectFilters), ...Object.values(textFilters)].forEach(control => control.addEventListener("input", render));
+  Object.values(ranges).forEach(range => {
+    range.min.addEventListener("input", render);
+    range.max.addEventListener("input", render);
+  });
+  reset.addEventListener("click", () => {
+    Object.entries(selectFilters).forEach(([key, select]) => {
+      select.value = key === "action" ? "Actionable outside program" : "All";
+    });
+    Object.values(textFilters).forEach(input => input.value = "");
+    Object.values(ranges).forEach(range => {
+      range.min.value = range.initialMin;
+      range.max.value = range.initialMax;
+      range.min.dispatchEvent(new Event("input"));
+      range.max.dispatchEvent(new Event("input"));
+    });
+    render();
+  });
+  render();
+  return root;
+};
+window.fleetVehicles = JSON.parse(
+  document.getElementById("fleet-vehicle-data").textContent
+);
+window.fleetDivisionRates = JSON.parse(
+  document.getElementById("division-rate-data").textContent
+);
+const mountFleetExplorer = () => {
+  const mount = document.getElementById("fleet-explorer-offline");
+  if (mount) mount.replaceWith(window.buildFleetExplorer(window.fleetVehicles));
+};
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", mountFleetExplorer);
+} else {
+  mountFleetExplorer();
+}
+</script>
+:::
+
+# Other review queues
+
+## Row
+
+::: {.card}
+## Reliability investigation
+
+Low-availability vehicles that do not meet the complete lifecycle-and-peer replacement rule.
+
+{{ reliability_table }}
+:::
+
+::: {.card}
+## Lifecycle planning
+
+Overdue or due-soon vehicles retaining at least 80% high-confidence availability.
+
+{{ lifecycle_table }}
+:::
+
+## Row
+
+::: {.card}
+## Data-quality review
+
+Operational vehicles with incomplete lifecycle or insufficient availability confidence
+are routed here rather than assigned false precision.
+
+{{ data_review_table }}
+:::
+
+::: {.card}
+## Sensitivity scenarios
+
+{{ sensitivity_table }}
+
+Stability is the share of six pre-specified absolute/peer threshold combinations under
+which a vehicle remains selected.
+:::
+
+# Division and location patterns
+
+## Row
+
+::: {.card}
+{{ funnel_figure }}
+:::
+
+::: {.card}
+## Interpretation
+
+Raw counts are affected by fleet size. Funnel limits show expected variation. A hotspot
+label also requires a Benjamini–Hochberg-corrected p-value below 0.05. Adjusted marginal
+rates account for lifecycle band and unit type, but not unmeasured duty-cycle differences.
+:::
+
+## Row
+
+::: {.card}
+## Division review summary
+
+{{ division_table }}
+:::
+
+::: {.card}
+## Maintenance-location review summary
+
+{{ location_table }}
+:::
+
+# Statistical evidence
+
+## Row
+
+::: {.card}
+{{ effect_figure }}
+:::
+
+::: {.card}
+{{ odds_figure }}
+:::
+
+## Row
+
+::: {.card}
+## Fixed hypothesis results
+
+Explorer filters do not recompute these predefined tests, preventing post-hoc significance hunting.
+
+For H3, the specified logistic regression is omitted when convergence or separation
+diagnostics fail. Any Mantel-Haenszel estimate is labelled as a post-convergence
+exploratory sensitivity—not a substitute for the failed primary model—and its retained population,
+sparse-cell correction and common-odds-ratio heterogeneity test are disclosed below.
+
+{{ hypothesis_table }}
+:::
+
+## Row
+
+::: {.card}
+## Regression terms
+
+{{ regression_table }}
+:::
+
+::: {.card}
+## Concepts in plain language
+
+- **Effect size:** how large a difference is, not merely whether it is detectable.
+- **Confidence interval:** population effects compatible with the method and data.
+- **P-value:** compatibility with a no-difference model, not the probability a conclusion is true.
+- **BCa bootstrap:** a resampling interval adjusted for bias and asymmetry.
+- **Cliff’s delta:** how often values in one group tend to exceed the other.
+- **Adjusted odds ratio:** association after accounting for measured fleet mix.
+- **FDR correction:** limits false discoveries across simultaneous hotspot tests.
+
+Tests are two-sided at α=0.05 with complete cases, 10,000 deterministic permutations
+and 10,000 BCa resamples. Conclusions emphasize effect sizes and intervals before p-values.
+:::
+
+# Data quality and methodology
+
+## Row
+
+::: {.card}
+{{ quality_figure }}
+:::
+
+::: {.card}
+## Field-level quality results
+
+{{ quality_table }}
+:::
+
+## Row
+
+::: {.card}
+## Decision framework
+
+Replacement-condition admission requires: operational and outside the program; valid
+lifecycle and high-confidence availability; at/beyond expected life or due within two
+years; availability below 80%; and bottom-20% peer availability.
+
+Peers use unit type plus expected life at n≥30, fall back to unit type at n≥30, and
+otherwise receive no percentile. High priority only escalates a tier. Pareto fronts
+order candidates across lifecycle consumption, absolute availability and peer percentile.
+:::
+
+::: {.card}
+## Data-confidence controls
+
+All source columns are ingested as text with hashes and row lineage. Typed fields never
+overwrite raw values. Exact duplicates are collapsed analytically; conflicting duplicate
+IDs are quarantined. Suspected displacement is never repaired speculatively.
+
+Availability is explicitly a **proxy**. Usage, expected usage and VEU do not affect actions.
+
+### Availability-confidence robustness
+
+The expanded definition recalculates peers after adding Medium-confidence availability.
+It is a robustness comparison only and does not change the primary High-confidence queue.
+
+{{ confidence_sensitivity_table }}
+:::
+
+## Row
+
+::: {.card}
+## Proposed A/B test—not executed
+
+- **Randomization:** maintenance garage.
+- **Treatment:** shortlist plus structured condition-review checklist.
+- **Control:** existing review process.
+- **Primary outcome:** actionable intervention confirmed within 90 days.
+- **Secondary outcomes:** inspection hours per finding, six-month downtime and emergency work orders.
+- **Analysis:** intention-to-treat with garage-clustered standard errors.
+- **Power:** pending a baseline rate and minimum worthwhile improvement.
+:::
+
+::: {.card}
+## Limitations and next data
+
+This is a cross-sectional audit, not causal evidence or a replacement classifier. Savings
+are not estimated because repair and replacement costs are absent. Future work should add
+historical outcomes, work-order cost, failures, safety events and condition inspections.
+
+<p class="small-print">Source: verified DuckDB analytical tables. Vehicle IDs are retained to support case-level review.</p>
+:::
